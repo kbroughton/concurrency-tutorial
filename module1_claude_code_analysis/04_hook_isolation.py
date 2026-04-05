@@ -211,12 +211,32 @@ except MemoryError:
     print("MemoryError: allocation blocked by resource limit")
 """
 
+    # macOS caveat: after fork(), the child inherits Python's dyld-inflated
+    # virtual address space (often 100s of GB virtual due to shared library
+    # cache + ASLR). Setting RLIMIT_AS to 64MB fails immediately because the
+    # limit would be below the current VAS — the ValueError propagates out of
+    # preexec_fn and kills the subprocess call entirely.
+    # Fall back to RLIMIT_DATA (heap segment only) which avoids that problem,
+    # but note macOS may not enforce it either — real memory containment on
+    # macOS requires Seatbelt profiles or container isolation (bubblewrap),
+    # which is exactly why Trail of Bits' claude-code-config uses those tools
+    # rather than relying on Python's resource module.
+    _rlimit_as_enforced = sys.platform != "darwin"
+
     def preexec_with_limits():
         """Called in child process before exec — sets resource limits."""
-        # Limit virtual memory to 64MB
         limit_bytes = 64 * 1024 * 1024
-        resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
-        # Limit CPU time to 5 seconds
+        try:
+            # Linux: limits total virtual address space — works reliably.
+            # macOS: fails (current VAS >> limit_bytes); see comment above.
+            resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
+        except (ValueError, OSError):
+            # macOS fallback: limit heap/data segment only
+            try:
+                resource.setrlimit(resource.RLIMIT_DATA, (limit_bytes, limit_bytes))
+            except (ValueError, OSError):
+                pass  # neither enforceable; demo shows unsandboxed behavior
+        # CPU limit works on both platforms
         resource.setrlimit(resource.RLIMIT_CPU, (5, 5))
 
     print("\n  Running memory bomb without limits:")
@@ -232,12 +252,21 @@ except MemoryError:
     output = proc_limited.stdout.decode().strip() or proc_limited.stderr.decode().strip()
     print(f"    {output or f'Process killed (exit code {proc_limited.returncode})'}")
 
+    if not _rlimit_as_enforced:
+        print("""
+  *** macOS note: RLIMIT_AS is not effective here. Python's virtual address
+  space after fork() already exceeds any practical limit due to dyld shared
+  library cache. On macOS, memory containment requires Seatbelt sandbox
+  profiles or OCI containers (bubblewrap on Linux). On Linux this demo
+  shows the allocation blocked as expected.
+        """)
+
     print("""
   Other useful resource limits for hook sandboxing:
     RLIMIT_NOFILE  — max open file descriptors
     RLIMIT_NPROC   — max child processes (prevent fork bombs)
     RLIMIT_FSIZE   — max file size the hook can write
-    RLIMIT_CPU     — max CPU seconds
+    RLIMIT_CPU     — max CPU seconds (works on both Linux and macOS)
     """)
 
 
