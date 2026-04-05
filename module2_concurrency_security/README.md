@@ -10,6 +10,37 @@ run and invalidate an assumption?*
 
 ---
 
+## Recommended Coordination Patterns
+
+Before studying what goes wrong, know the two patterns Claude Code recommends
+to avoid shared-filesystem conflicts by construction:
+
+**Git worktrees** — `git worktree add ../agent-1-workspace -b agent/task-1`
+
+Each agent gets an independent working directory backed by the same repo.
+Separate index, separate HEAD, separate files on disk. Agents can't race
+on workspace files because they're literally in different directories.
+They reconcile via normal git merge/rebase when done.
+
+```
+repo/.git  (shared object store, history)
+    │
+    ├── repo/           (main worktree — human or coordinator)
+    ├── ../agent-1/     (worktree 1 — branch agent/task-1)
+    └── ../agent-2/     (worktree 2 — branch agent/task-2)
+```
+
+**Agent teams** — a coordinator agent spawns sub-agents with non-overlapping
+task assignments. Agents communicate through structured tool calls and defined
+output schemas, not by reading each other's files.
+
+**What these patterns do NOT eliminate** (still relevant to study):
+- `~/.claude/` state files are shared across all worktrees — the race from Module 1 persists
+- External shared resources (databases, APIs, shared config endpoints) hit the same races at a higher abstraction level
+- Understanding *why* worktrees work requires understanding what they isolate and what they don't
+
+---
+
 ## The Threat Model: Multi-Agent Systems
 
 Claude Code (and AI agent systems generally) create new concurrency threat models:
@@ -18,16 +49,17 @@ Claude Code (and AI agent systems generally) create new concurrency threat model
 Agent A ──┐
           ├──► Shared Filesystem ──► Agent B
 Agent C ──┘         │
-                     └──► Shared SQLite / State Files
+                     └──► Shared ~/.claude/ State Files
+                               (NOT isolated by worktrees)
 ```
 
-Multiple agents:
-- Read the same config files
-- Write to the same workspace files
-- Execute subprocesses concurrently
-- Share tool state across sessions
+With worktrees, workspace file races are eliminated. What remains:
+- `~/.claude/security_warnings_state_*.json` — shared across all sessions
+- GitHub / cloud API rate limits — shared across all agents using the same key
+- External databases or services agents write to concurrently
+- The git object store itself (though git handles concurrent writes safely)
 
-Each of these creates race windows.
+Each of these still creates race windows.
 
 ---
 

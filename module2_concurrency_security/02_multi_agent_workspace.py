@@ -4,9 +4,28 @@ Module 2, File 2: Multi-Agent Workspace Conflicts
 
 When multiple Claude Code agents operate on the same workspace directory,
 they compete for the same files. This module simulates realistic conflict
-scenarios and shows coordination strategies.
+scenarios and the locking strategies that address them.
 
-Scenarios:
+NOTE ON RECOMMENDED PRACTICE:
+  The conflicts below are largely eliminated by the two patterns Claude Code
+  officially recommends for parallel agent work:
+
+  1. Git worktrees — each agent gets its own working directory backed by the
+     same repo (`git worktree add ../feature-agent-1 -b agent/feature-1`).
+     Separate index, separate HEAD, separate files on disk. No shared paths
+     to race on. Agents merge via normal git workflow when done.
+
+  2. Agent teams — structured multi-agent architectures where a coordinator
+     agent assigns non-overlapping tasks to sub-agents, communicating through
+     defined interfaces (tool calls, structured output) rather than shared files.
+
+  The scenarios below are still worth understanding because:
+  - Worktrees share ~/.claude/ state files (the race from module 1 persists)
+  - Agent teams that write to shared external resources (databases, APIs,
+    shared config) hit the same races at a higher level of abstraction
+  - Understanding WHY worktrees work requires understanding what they isolate
+
+Scenarios demonstrated:
   1. Two agents writing to the same plan file (lost update)
   2. Agent reads a file another agent is mid-write (torn read)
   3. Optimistic concurrency control (detect-and-retry)

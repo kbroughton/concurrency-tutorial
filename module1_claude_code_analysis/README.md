@@ -77,11 +77,12 @@ This is a classic **read-modify-write race condition** on the filesystem.
   on cross-platform you'd use `filelock` or write-then-rename atomic patterns."
 
 - "The TypeScript automation code uses `async/await` sequentially within a session.
-  In practice, users get process-level parallelism by running separate Claude Code
-  sessions across different repos simultaneously — each is an independent OS process
-  with its own V8 heap and event loop. This is architecturally sounder than
-  in-process `Promise.all()` for isolation, but still shares API rate limits and
-  hits the state file race condition described above."
+  The recommended approach for parallelism is **agent teams** or **Git worktrees**,
+  not `Promise.all()` within a single session. Worktrees give each agent its own
+  working directory backed by the same repo — separate index, separate HEAD, no
+  shared files to race on — while agent teams provide structured coordination with
+  defined roles and communication interfaces. Both eliminate the file-conflict
+  races in module 2 by construction rather than by locking."
 
 - "`Promise.all()` would speed up per-issue API calls within a session, but it
   carries its own security trade-offs: unbounded fan-out can exhaust GitHub rate
