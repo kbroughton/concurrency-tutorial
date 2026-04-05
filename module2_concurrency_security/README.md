@@ -34,10 +34,67 @@ repo/.git  (shared object store, history)
 task assignments. Agents communicate through structured tool calls and defined
 output schemas, not by reading each other's files.
 
-**What these patterns do NOT eliminate** (still relevant to study):
+**What worktrees do NOT eliminate** (still relevant to study):
 - `~/.claude/` state files are shared across all worktrees — the race from Module 1 persists
 - External shared resources (databases, APIs, shared config endpoints) hit the same races at a higher abstraction level
 - Understanding *why* worktrees work requires understanding what they isolate and what they don't
+
+### Agent Teams: Built-In Coordination (with gaps)
+
+The agent teams system (docs: code.claude.com/docs/en/agent-teams) provides coordination
+infrastructure, but understanding its internals reveals exactly which races it solves
+and which it defers to you.
+
+**What the system handles for you:**
+
+- **Task claiming uses file locking** to prevent race conditions when multiple teammates
+  try to claim the same task simultaneously — a concrete application of the patterns
+  in `03_deadlocks.py` and `02_multi_agent_workspace.py`.
+- **Automatic idle notification** when a teammate finishes — structured result
+  aggregation rather than polling shared files.
+- **Task dependency tracking** — blocked tasks unblock automatically when their
+  dependencies complete, avoiding the manual coordination that creates races.
+
+**What it explicitly does NOT solve (from the docs):**
+
+> *"Avoid file conflicts: Two teammates editing the same file leads to overwrites."*
+
+The system warns about this but provides no built-in fix — that's the lost-update race
+from `02_multi_agent_workspace.py` demo 1. The recommended fix is still "break work so
+each teammate owns a different set of files" (i.e., manual partitioning).
+
+**Security-relevant gaps in the current design:**
+
+1. **Permission inheritance, not least privilege**: All teammates start with the
+   lead's permission mode. There is no per-teammate permission scoping at spawn time.
+   If the lead runs with elevated permissions, every teammate gets them — the confused
+   deputy problem applied at team scale. The `downscoping-mcp` patterns from Module 1
+   would need to be applied per-teammate, not just per-session.
+
+2. **`~/.claude/teams/` and `~/.claude/tasks/` are shared state**: The teams/tasks
+   metadata lives in `~/.claude/` alongside the security state files we already
+   identified as unprotected. File locking is used for task *claiming*, but the
+   broader config files may have the same read-modify-write races.
+
+3. **No automatic timeout or circuit breaker on teammates**: The docs describe
+   teammates stopping on errors as a manual-recovery scenario. There is no built-in
+   timeout that kills a hung teammate and marks its tasks for reassignment. This is
+   the missing circuit breaker from `04_autonomous_agent_safety.py`.
+
+4. **Broadcast scales cost linearly and has no rate limit**: A teammate stuck in a
+   retry loop calling `broadcast` will bill every other teammate's context window.
+   No built-in backpressure or circuit breaker on message volume.
+
+5. **Cleanup must be done by the lead**: *"Teammates should not run cleanup because
+   their team context may not resolve correctly, potentially leaving resources in an
+   inconsistent state."* This is an explicitly documented atomicity constraint —
+   the system cannot guarantee consistent cleanup if the lead crashes mid-teardown.
+
+**What this means for a security engineer:**
+The agent teams system gets the hardest coordination problem right (task claiming with
+locking) but leaves the application-level races (shared file edits, permission scope,
+circuit breaking) to the developer. The patterns in this module are the building blocks
+for filling those gaps.
 
 ---
 
