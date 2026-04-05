@@ -188,11 +188,40 @@ def demo_log_interleaving():
 #
 # The Claude-specific scenarios where a genuine trust boundary is crossed:
 #
-# 1. HOOK EXECUTION TRUST (most impactful)
-#    Claude discovers scripts in .claude/hooks/ and executes them as trusted
-#    subprocesses with full user permissions. A sandboxed agent has write
-#    access to the workspace but NOT to ~/.claude/hooks/. If a hook sources
-#    a file from the workspace:
+# 1. HOOK EXECUTION TRUST (requires two non-default conditions)
+#
+#    This attack does NOT arise in a standard Claude Code install. It requires:
+#      a) A hook that sources/execs a file from the workspace — no default Claude
+#         hook does this; a user must write such a hook deliberately.
+#      b) A permission asymmetry: agent has workspace write but NOT ~/.claude/hooks/
+#         write. The default is the user's full filesystem permissions everywhere,
+#         so no asymmetry exists unless deliberate sandboxing is applied.
+#
+#    Most realistic context: CI/CD pipelines and security-hardened local configs
+#    where the agent runs inside a container or OS sandbox with the repo mounted
+#    read-write but ~/.claude/ supplied from a read-only host volume or image layer.
+#    Projects like github.com/trailofbits/claude-code-config are explicitly trying
+#    to build this boundary: seatbelt (macOS) or bubblewrap (Linux) OS-level
+#    sandboxing with a fixed ~/.claude/ config baked in.
+#
+#    Does TOCTOU via hook-sourcing defeat Trail of Bits' defaults?
+#      Core sandbox (seatbelt/bubblewrap)        → NO  — OS-level, unaffected by writes
+#      Inline permission deny rules               → NO  — parse tool_input, not workspace
+#      Inline hooks (rm-rf block, push-main block)→ NO  — same; no workspace file read
+#      Optional enforce-package-manager.sh        → PARTIAL — this hook checks whether
+#        ${CLAUDE_PROJECT_DIR}/pnpm-lock.yaml exists. A workspace-writing agent can
+#        create or delete that file to enable/disable enforcement. This is DIRECT
+#        MANIPULATION (not TOCTOU) because no hook validation check is bypassed.
+#      Optional log-gam.sh                        → audit log forgery by pre-seeding
+#        ${CLAUDE_PROJECT_DIR}/google/.changelog-raw.jsonl before legitimate entries.
+#
+#    Key design distinction: Trail of Bits hooks READ workspace state (file existence,
+#    content for logging) but do NOT source/exec workspace code — so the TOCTOU
+#    variant described here doesn't apply. Their residual risk is direct workspace
+#    manipulation changing hook BEHAVIOR, not hook EXECUTION. The TOCTOU attack only
+#    matters if a hook first validates then later execs a workspace file.
+#
+#    If a hook sources a file from the workspace (the constructed scenario):
 #
 #      #!/bin/bash
 #      source "${PROJECT_DIR}/.claude/hook_config.sh"   # ← reads workspace
