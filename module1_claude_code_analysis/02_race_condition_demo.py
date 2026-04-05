@@ -177,34 +177,82 @@ def demo_log_interleaving():
 # ---------------------------------------------------------------------------
 # 3. TOCTOU (Time-of-Check / Time-of-Use) Race
 # ---------------------------------------------------------------------------
+#
+# NOTE ON PRIVILEGE ESCALATION:
+#
+# A TOCTOU attack only escalates privilege when the check and the use run at
+# DIFFERENT trust levels, and a symlink can bridge them. The generic example
+# below illustrates the race mechanics, but the attacker already owns the
+# temp directory — they could read the "secret" file directly. No privilege
+# delta exists in the demo itself.
+#
+# The Claude-specific scenarios where a genuine trust boundary is crossed:
+#
+# 1. HOOK EXECUTION TRUST (most impactful)
+#    Claude discovers scripts in .claude/hooks/ and executes them as trusted
+#    subprocesses with full user permissions. A sandboxed agent has write
+#    access to the workspace but NOT to ~/.claude/hooks/. If a hook sources
+#    a file from the workspace:
+#
+#      #!/bin/bash
+#      source "${PROJECT_DIR}/.claude/hook_config.sh"   # ← reads workspace
+#
+#    The sandboxed agent writes malicious content to hook_config.sh.
+#    Claude executes the hook (trusted); the hook runs attacker content.
+#    The agent crossed from untrusted workspace → trusted execution context.
+#
+# 2. SETTINGS INJECTION IN AGENT TEAMS — NOT a TOCTOU scenario
+#    If teammate A is on the same machine and user as teammate B (the normal
+#    agent teams setup), A can directly overwrite B's .claude/settings.json
+#    without racing anything. TOCTOU adds nothing when the attacker already
+#    has persistent write access — just overwrite directly.
+#    This is a filesystem isolation failure, not a race condition.
+#    The fix is OS-level separation (different UIDs, MAC policy) not O_NOFOLLOW.
+#
+# 3. SEMANTIC TRUST BOUNDARY (data → instruction crossing)
+#    Claude checks a file is valid JSON before including it in a trusted
+#    context (e.g., project memory, CLAUDE.md). An agent swaps the file
+#    for one containing prompt injection between the validation check and
+#    the read. The validated-clean file is now treated as trusted instruction.
+#
+# The demo below is a correct illustration of TOCTOU mechanics.
+# See module2/05_malicious_teammate.py for scenario 2 in a team context.
 
 class VulnerableFileProcessor:
     """
     Check-then-act pattern: check if file exists, then read it.
     Between the check and the read, the file can be replaced.
-    This is a TOCTOU vulnerability.
+
+    Generic TOCTOU illustration — see module docstring above for
+    the Claude-specific scenarios where this crosses a real trust boundary.
     """
 
     def process_config(self, config_path: Path) -> Optional[dict]:
         """
-        VULNERABLE: An attacker with filesystem access could swap config_path
-        with a symlink to a sensitive file between the exists() check and open().
+        VULNERABLE: Between exists() and open(), path can become a symlink
+        pointing outside the intended directory.
         """
         # TIME-OF-CHECK
         if not config_path.exists():
             return None
 
-        # ← ATTACK WINDOW: attacker replaces config_path with symlink to /etc/passwd
+        # ← ATTACK WINDOW: path is replaced with a symlink
 
         # TIME-OF-USE
-        with open(config_path) as f:   # now reads symlink target, not config
+        with open(config_path) as f:   # follows symlink, reads unintended target
             return json.load(f)
 
 
 def demo_toctou():
-    """Demonstrate the TOCTOU window with a thread that swaps the file."""
+    """
+    Demonstrate the TOCTOU window mechanics.
+    The 'attacker' and 'secret' are in the same temp dir here — no real
+    privilege escalation. See the module docstring for Claude-specific
+    scenarios where the trust boundary is genuine.
+    """
     print("\n" + "=" * 60)
-    print("TOCTOU (Time-of-Check / Time-of-Use) Demo")
+    print("TOCTOU (Time-of-Check / Time-of-Use) — Mechanics Demo")
+    print("(Generic illustration; see docstring for Claude-specific trust boundaries)")
     print("=" * 60)
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -266,6 +314,29 @@ def demo_toctou():
             print("  No leak this run (race window is narrow — try running again)")
 
         print("""
+  Mechanics confirmed. Note on privilege delta:
+    The demo attacker already owns the temp directory, so they could read
+    secret.json directly — no real privilege escalation here.
+
+    TOCTOU is only more powerful than direct write when there is a CHECK
+  that the malicious content cannot pass. The race presents clean content
+  to the check and swaps malicious content in before the use.
+  If direct write is already available, the check doesn't matter.
+
+  Real Claude scenarios where TOCTOU IS genuinely needed:
+    - Hook content scanner: Claude validates hook script content before
+      executing (passes injection check on clean content, swap happens
+      after scan, malicious content runs). Direct write fails the scanner;
+      TOCTOU bypasses it.
+    - Data→instruction re-read: file is read as untrusted and validated
+      clean, then re-read (or re-trusted) as an instruction source.
+      Swap between the two reads means validation sees clean, execution
+      sees malicious.
+
+  NOT a TOCTOU scenario:
+    - Agent teams settings file: same user/machine, direct overwrite
+      works fine. This is a filesystem isolation gap, not a race.
+
   The fix: use os.open() with O_NOFOLLOW to refuse symlinks, or
   open the file first and validate *after* — never check-then-open.
         """)
