@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ECorp AI Supply Chain — MITRE ATT&CK Threat Matrix</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --subtext: #8b949e;
+    --tactic-bg: #21262d;
+
+    --sA: #e74c3c;  /* Scenario A – Skills Backdoor     */
+    --sB: #e67e22;  /* Scenario B – Hook Package        */
+    --sC: #9b59b6;  /* Scenario C – Linting Workflow    */
+    --sD: #2980b9;  /* Scenario D – PR Target (pullrequest_target) */
+    --sAB: #d35400; /* A + B */
+    --sAC: #c0392b; /* A + C */
+    --sBC: #7d3c98; /* B + C */
+    --sABC:#922b21; /* A + B + C */
+    --sAll:#6c3483; /* All 4   */
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 13px;
+    padding: 24px;
+  }
+
+  header {
+    margin-bottom: 28px;
+  }
+  header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    margin-bottom: 6px;
+  }
+  header p {
+    color: var(--subtext);
+    font-size: 13px;
+    max-width: 860px;
+    line-height: 1.5;
+  }
+
+  /* ── Legend ─────────────────────────────────────────── */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 28px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .legend-title {
+    width: 100%;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--subtext);
+    margin-bottom: 4px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+  }
+  .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  /* ── Matrix grid ─────────────────────────────────────── */
+  .matrix {
+    display: grid;
+    grid-template-columns: repeat(9, minmax(130px, 1fr));
+    gap: 8px;
+    min-width: 1200px;
+  }
+
+  .tactic-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .tactic-header {
+    background: var(--tactic-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px 6px 0 0;
+    padding: 10px 10px 8px;
+    text-align: center;
+  }
+  .tactic-id {
+    font-size: 10px;
+    color: var(--subtext);
+    letter-spacing: 0.4px;
+    margin-bottom: 2px;
+  }
+  .tactic-name {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+  }
+  .tactic-count {
+    font-size: 10px;
+    color: var(--subtext);
+    margin-top: 3px;
+  }
+
+  /* ── Technique cards ─────────────────────────────────── */
+  .technique {
+    border-radius: 5px;
+    padding: 8px 10px;
+    border: 1px solid transparent;
+    cursor: default;
+    transition: transform 0.1s, box-shadow 0.1s;
+    position: relative;
+  }
+  .technique:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    z-index: 10;
+  }
+
+  /* Scenario coloring */
+  .sA   { background: color-mix(in srgb, var(--sA)  25%, var(--surface)); border-color: var(--sA);  }
+  .sB   { background: color-mix(in srgb, var(--sB)  25%, var(--surface)); border-color: var(--sB);  }
+  .sC   { background: color-mix(in srgb, var(--sC)  25%, var(--surface)); border-color: var(--sC);  }
+  .sD   { background: color-mix(in srgb, var(--sD)  25%, var(--surface)); border-color: var(--sD);  }
+  .sAB  { background: color-mix(in srgb, var(--sAB) 25%, var(--surface)); border-color: var(--sAB); }
+  .sBC  { background: color-mix(in srgb, var(--sBC) 25%, var(--surface)); border-color: var(--sBC); }
+  .sABC { background: color-mix(in srgb, var(--sABC)25%, var(--surface)); border-color: var(--sABC);}
+  .sAll { background: color-mix(in srgb, var(--sAll)30%, var(--surface)); border-color: var(--sAll); }
+
+  .tech-id {
+    font-size: 10px;
+    color: var(--subtext);
+    font-family: "SF Mono", "Fira Mono", monospace;
+    margin-bottom: 3px;
+  }
+  .tech-name {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-bottom: 4px;
+  }
+  .tech-scenarios {
+    display: flex;
+    gap: 3px;
+    flex-wrap: wrap;
+    margin-bottom: 5px;
+  }
+  .badge {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    letter-spacing: 0.3px;
+  }
+  .badge-A { background: var(--sA);  color: #fff; }
+  .badge-B { background: var(--sB);  color: #fff; }
+  .badge-C { background: var(--sC);  color: #fff; }
+  .badge-D { background: var(--sD);  color: #fff; }
+
+  /* tooltip */
+  .tooltip {
+    display: none;
+    position: absolute;
+    left: 100%;
+    top: 0;
+    margin-left: 10px;
+    width: 280px;
+    background: #1c2128;
+    border: 1px solid #484f58;
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text);
+    z-index: 100;
+    pointer-events: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+  }
+  .tooltip-title {
+    font-weight: 600;
+    margin-bottom: 5px;
+    font-size: 12px;
+  }
+  .tooltip-desc {
+    color: var(--subtext);
+    font-size: 11px;
+  }
+  .tooltip-ecorp {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: #c9d1d9;
+  }
+  .technique:hover .tooltip {
+    display: block;
+  }
+  /* flip tooltip for rightmost columns */
+  .flip .tooltip {
+    left: auto;
+    right: 100%;
+    margin-left: 0;
+    margin-right: 10px;
+  }
+
+  /* scroll wrapper */
+  .matrix-scroll {
+    overflow-x: auto;
+    padding-bottom: 16px;
+  }
+
+  footer {
+    margin-top: 32px;
+    color: var(--subtext);
+    font-size: 11px;
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+  }
+  footer a { color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ECorp AI Supply Chain — Custom MITRE ATT&amp;CK Threat Matrix</h1>
+  <p>
+    Maps the four Ecorp attack scenarios to MITRE ATT&amp;CK Enterprise techniques.
+    Hover any card for technique details and the specific Ecorp manifestation.
+    Scenarios: <strong>A</strong> Skills Backdoor &nbsp;·&nbsp;
+    <strong>B</strong> Hook Package &nbsp;·&nbsp;
+    <strong>C</strong> Linting Workflow OIDC Abuse &nbsp;·&nbsp;
+    <strong>D</strong> pull_request_target Footgun.
+  </p>
+</header>
+
+<div class="legend">
+  <div class="legend-title">Scenario legend</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sA)"></div>A — Skills Backdoor (Malice → Maya → Bob)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sB)"></div>B — Hook Package Supply Chain (Malice → npm → Bob's machine)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sC)"></div>C — Linting Workflow OIDC Abuse (Chalice/OSS → devops prod)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sD)"></div>D — pull_request_target Footgun (Chalice → tools-team token)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sAB)"></div>A + B</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sBC)"></div>B + C</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sABC)"></div>A + B + C</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sAll)"></div>All scenarios</div>
+</div>
+
+<div class="matrix-scroll">
+<div class="matrix">
+
+  <!-- ══════════════════════════════════════════════════════════
+       COLUMN 1 · Resource Development
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="tactic-col">
+    <div class="tactic-header">
+      <div class="tactic-id">TA0042</div>
+      <div class="tactic-name">Resource Development</div>
+      <div class="tactic-count">3 techniques</div>
+    </div>
+
+    <div class="technique sABC">
+      <div class="tech-id">T1587.001</div>
+      <div class="tech-name">Develop Capabilities: Malware</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+        <span class="badge badge-B">B</span>
+        <span class="badge badge-C">C</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1587.001 · Develop Capabilities: Malware</div>
+        <div class="tooltip-desc">Adversary builds malicious tooling before targeting the victim.</div>
+        <div class="tooltip-ecorp">
+          <strong>A:</strong> Malice crafts prompt injection in skill Markdown.<br>
+          <strong>B:</strong> Malice crafts malicious git hook + patched npm package.<br>
+          <strong>C:</strong> Chalice crafts postinstall script in 70-line disguise.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sAll">
+      <div class="tech-id">T1586.003</div>
+      <div class="tech-name">Compromise Accounts: Cloud Accounts</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+        <span class="badge badge-B">B</span>
+        <span class="badge badge-C">C</span>
+        <span class="badge badge-D">D</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1586.003 · Compromise Accounts: Cloud Accounts</div>
+        <div class="tooltip-desc">Adversary uses legitimate contributor or team-member accounts.</div>
+        <div class="tooltip-ecorp">
+          All scenarios use legitimate GitHub identities (Malice has merge rights; Chalice has contributor rights). No credential theft needed for initial access — the accounts are valid.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sBC">
+      <div class="tech-id">T1588.002</div>
+      <div class="tech-name">Obtain Capabilities: Tool</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-B">B</span>
+        <span class="badge badge-C">C</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1588.002 · Obtain Capabilities: Tool</div>
+        <div class="tooltip-desc">Adversary obtains tools that will be used during targeting.</div>
+        <div class="tooltip-ecorp">
+          <strong>B:</strong> Malice obtains NPM_PUBLISH_TOKEN by leaking it from CI logs.<br>
+          <strong>C:</strong> Chalice obtains knowledge of pull_request_target footgun from security newsletter.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       COLUMN 2 · Initial Access
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="tactic-col">
+    <div class="tactic-header">
+      <div class="tactic-id">TA0001</div>
+      <div class="tactic-name">Initial Access</div>
+      <div class="tactic-count">3 techniques</div>
+    </div>
+
+    <div class="technique sABC">
+      <div class="tech-id">T1195.001</div>
+      <div class="tech-name">Supply Chain Compromise: Software Dependencies</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+        <span class="badge badge-B">B</span>
+        <span class="badge badge-C">C</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1195.001 · Supply Chain Compromise: Deps</div>
+        <div class="tooltip-desc">Adversary manipulates software packages before delivery.</div>
+        <div class="tooltip-ecorp">
+          <strong>A:</strong> ecorp-ai-skills skill file (prompt injection in Markdown).<br>
+          <strong>B:</strong> @ecorp/git-hooks npm package (malicious patch version).<br>
+          <strong>C:</strong> @ecorp/eslint-config (postinstall in OSS PR → internal sync).
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sD">
+      <div class="tech-id">T1190</div>
+      <div class="tech-name">Exploit Public-Facing Application</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-D">D</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1190 · Exploit Public-Facing Application</div>
+        <div class="tooltip-desc">Adversary exploits vulnerability in internet-facing system.</div>
+        <div class="tooltip-ecorp">
+          <strong>D:</strong> pull_request_target misconfiguration is a published vulnerability pattern (GitHub Security Lab advisory). Chalice exploits it to run fork code in the target repo's secret context before any human reviews.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sAll">
+      <div class="tech-id">T1078</div>
+      <div class="tech-name">Valid Accounts</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+        <span class="badge badge-B">B</span>
+        <span class="badge badge-C">C</span>
+        <span class="badge badge-D">D</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1078 · Valid Accounts</div>
+        <div class="tooltip-desc">Adversary uses legitimate credentials to maintain access.</div>
+        <div class="tooltip-ecorp">
+          Every scenario starts from a valid account. Malice's GitHub identity is a full team member. Chalice's is a known external contributor. There is no phishing, no brute force — access is legitimate until it isn't.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       COLUMN 3 · Execution
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="tactic-col">
+    <div class="tactic-header">
+      <div class="tactic-id">TA0002</div>
+      <div class="tactic-name">Execution</div>
+      <div class="tactic-count">4 techniques</div>
+    </div>
+
+    <div class="technique sA">
+      <div class="tech-id">T1059.006</div>
+      <div class="tech-name">Scripting: Python / LLM Instruction</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1059 · Command &amp; Scripting Interpreter</div>
+        <div class="tooltip-desc">Adversary uses interpreter to execute commands.</div>
+        <div class="tooltip-ecorp">
+          <strong>A:</strong> Prompt injection in a Markdown skill file is interpreted as instructions by Claude Code. The LLM executes the injected commands (WebFetch POST) as tool calls within the active session — with that session's full env and permissions.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sBC">
+      <div class="tech-id">T1059.007</div>
+      <div class="tech-name">Scripting: JavaScript / Node.js</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-B">B</span>
+        <span class="badge badge-C">C</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1059.007 · Command &amp; Scripting: JavaScript</div>
+        <div class="tooltip-desc">Adversary uses Node.js scripts as execution vehicle.</div>
+        <div class="tooltip-ecorp">
+          <strong>B:</strong> Malicious bash hook runs shell commands on every git commit.<br>
+          <strong>C:</strong> scripts/setup-telemetry.js runs as npm postinstall, inside a CI step that has AWS OIDC credentials available.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sAB">
+      <div class="tech-id">T1204.001</div>
+      <div class="tech-name">User Execution: Malicious File</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+        <span class="badge badge-B">B</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1204.001 · User Execution: Malicious File</div>
+        <div class="tooltip-desc">Adversary relies on user to execute a malicious file.</div>
+        <div class="tooltip-ecorp">
+          <strong>A:</strong> Bob runs /deploy-review — a slash command he uses daily. No social engineering required; the skill is in the trusted ecorp-ai-skills repo.<br>
+          <strong>B:</strong> Bob runs git commit — his most routine operation. The hook fires automatically.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sBC">
+      <div class="tech-id">T1072</div>
+      <div class="tech-name">Software Deployment Tools</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-B">B</span>
+        <span class="badge badge-C">C</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1072 · Software Deployment Tools</div>
+        <div class="tooltip-desc">Adversary uses software deployment infrastructure to execute.</div>
+        <div class="tooltip-ecorp">
+          <strong>B:</strong> npm global install + core.hooksPath. The package manager is the delivery vehicle.<br>
+          <strong>C:</strong> GitHub Actions CI pipeline. The CI/CD system is the execution environment, running postinstall with devops-level OIDC credentials.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       COLUMN 4 · Persistence
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="tactic-col">
+    <div class="tactic-header">
+      <div class="tactic-id">TA0003</div>
+      <div class="tactic-name">Persistence</div>
+      <div class="tactic-count">3 techniques</div>
+    </div>
+
+    <div class="technique sB">
+      <div class="tech-id">T1546.004</div>
+      <div class="tech-name">Event Triggered: Unix Shell Config</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-B">B</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1546.004 · Event Triggered: Unix Shell Configuration</div>
+        <div class="tooltip-desc">Adversary hooks into shell/git event triggers for persistence.</div>
+        <div class="tooltip-ecorp">
+          <strong>B:</strong> @ecorp/git-hooks installs hooks via core.hooksPath. Every git commit on every repo on the machine triggers the malicious pre-commit hook — persistent, automatic, invisible to git status.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sC">
+      <div class="tech-id">T1554</div>
+      <div class="tech-name">Compromise Host Software Binary</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-C">C</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1554 · Compromise Host Software Binary</div>
+        <div class="tooltip-desc">Adversary modifies binaries on compromised hosts for persistence.</div>
+        <div class="tooltip-ecorp">
+          <strong>C (cache variant):</strong> Postinstall modifies a binary in node_modules/.bin/. If the workflow caches node_modules/ directly, the modified binary is cached and restored to every future CI runner without re-running install. No subsequent postinstall needed.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sABC">
+      <div class="tech-id">T1195.002</div>
+      <div class="tech-name">Supply Chain: Software Supply Chain</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+        <span class="badge badge-B">B</span>
+        <span class="badge badge-C">C</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1195.002 · Supply Chain Compromise: Software</div>
+        <div class="tooltip-desc">Adversary manipulates software and its delivery mechanism.</div>
+        <div class="tooltip-ecorp">
+          Published packages and skill repos are trusted by definition — they passed the same review process as every previous version. Persistence comes from the supply chain relationship: once the malicious version is in the trusted feed, it self-propagates via Renovate/auto-update to all consumers.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       COLUMN 5 · Privilege Escalation
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="tactic-col">
+    <div class="tactic-header">
+      <div class="tactic-id">TA0004</div>
+      <div class="tactic-name">Privilege Escalation</div>
+      <div class="tactic-count">3 techniques</div>
+    </div>
+
+    <div class="technique sC">
+      <div class="tech-id">T1134.001</div>
+      <div class="tech-name">Token Manipulation: Token Impersonation</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-C">C</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1134.001 · Token Manipulation: Token Impersonation</div>
+        <div class="tooltip-desc">Adversary impersonates another user via token manipulation.</div>
+        <div class="tooltip-ecorp">
+          <strong>C:</strong> The reusable lint workflow inherits the CALLER's OIDC token. When backstage-service-catalog calls it, the postinstall step runs with a token that can assume github-actions-devops-prod. The postinstall is in a package — it has no direct GitHub Actions permission — but it inherits credentials from the environment.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sA">
+      <div class="tech-id">T1548</div>
+      <div class="tech-name">Abuse Elevation Control Mechanism</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1548 · Abuse Elevation Control Mechanism</div>
+        <div class="tooltip-desc">Adversary bypasses mechanisms designed to control elevated privileges.</div>
+        <div class="tooltip-ecorp">
+          <strong>A:</strong> Claude Code /sandbox is an elevation control. The skill file is executed as LLM instructions, not as a subprocess — sandbox applies to tool calls, not to LLM decision-making. The WebFetch tool call bypasses the intent of sandboxing because the sandbox allows WebFetch to approved domains, and the exfil domain looks like telemetry.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sABC">
+      <div class="tech-id">T1078.004</div>
+      <div class="tech-name">Valid Accounts: Cloud Accounts</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+        <span class="badge badge-B">B</span>
+        <span class="badge badge-C">C</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1078.004 · Valid Accounts: Cloud Accounts</div>
+        <div class="tooltip-desc">Adversary uses cloud account credentials for privilege escalation.</div>
+        <div class="tooltip-ecorp">
+          <strong>A:</strong> Exfiltrated PULUMI_ACCESS_TOKEN is org-level Pulumi Cloud access.<br>
+          <strong>B:</strong> Exfiltrated session env includes AWS_PROFILE=ecorp-devops-prod.<br>
+          <strong>C:</strong> OIDC exchange yields temporary creds for github-actions-devops-prod (PowerUser + iam:PassRole → cross-account access to Aegis/Serenova accounts).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       COLUMN 6 · Defense Evasion
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="tactic-col">
+    <div class="tactic-header">
+      <div class="tactic-id">TA0005</div>
+      <div class="tactic-name">Defense Evasion</div>
+      <div class="tactic-count">4 techniques</div>
+    </div>
+
+    <div class="technique sAll">
+      <div class="tech-id">T1036.005</div>
+      <div class="tech-name">Masquerading: Match Legitimate Name</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+        <span class="badge badge-B">B</span>
+        <span class="badge badge-C">C</span>
+        <span class="badge badge-D">D</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1036.005 · Masquerading: Match Legitimate Name or Location</div>
+        <div class="tooltip-desc">Adversary names malicious artifact to appear legitimate.</div>
+        <div class="tooltip-ecorp">
+          Every attack is disguised as legitimate tooling: "CI adoption analytics," "pre-commit linting," "deploy-review telemetry," "TypeScript 5.x compatibility." The malicious code does what it claims — the exfiltration is additive, not substitutional.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sAC">
+      <div class="tech-id">T1027</div>
+      <div class="tech-name">Obfuscated Files or Information</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+        <span class="badge badge-C">C</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1027 · Obfuscated Files or Information</div>
+        <div class="tooltip-desc">Adversary makes code harder to detect via obfuscation.</div>
+        <div class="tooltip-ecorp">
+          <strong>A:</strong> Prompt injection hidden in HTML comment block in unchanged section of Markdown file — outside GitHub's default diff view.<br>
+          <strong>C:</strong> Malicious 8 lines on line 62–70 of a 70-line script that is mostly legitimate browser target detection code.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sBC">
+      <div class="tech-id">T1553.002</div>
+      <div class="tech-name">Subvert Trust Controls: Code Signing</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-B">B</span>
+        <span class="badge badge-C">C</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1553.002 · Subvert Trust Controls: Code Signing</div>
+        <div class="tooltip-desc">Adversary subverts code signing to disguise malicious code.</div>
+        <div class="tooltip-ecorp">
+          npm provenance creates valid attestations for malicious packages because the package WAS legitimately built from a commit in the right repo. Provenance proves origin, not safety. A reviewer seeing "attestation: valid" gets false confidence. This is provenance-as-safety-theater.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sB">
+      <div class="tech-id">T1070.004</div>
+      <div class="tech-name">Indicator Removal: File Deletion</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-B">B</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1070.004 · Indicator Removal: File Deletion</div>
+        <div class="tooltip-desc">Adversary deletes files to remove evidence of intrusion.</div>
+        <div class="tooltip-ecorp">
+          <strong>B:</strong> The malicious @ecorp/git-hooks@2.1.4 can be yanked from Verdaccio after the attack. Developers whose machines already updated will retain the version in their npm cache. The hook binary on disk is the only artifact — and it looks like a standard pre-commit script.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       COLUMN 7 · Credential Access
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="tactic-col flip">
+    <div class="tactic-header">
+      <div class="tactic-id">TA0006</div>
+      <div class="tactic-name">Credential Access</div>
+      <div class="tactic-count">3 techniques</div>
+    </div>
+
+    <div class="technique sAll">
+      <div class="tech-id">T1528</div>
+      <div class="tech-name">Steal Application Access Token</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+        <span class="badge badge-B">B</span>
+        <span class="badge badge-C">C</span>
+        <span class="badge badge-D">D</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1528 · Steal Application Access Token</div>
+        <div class="tooltip-desc">Adversary steals application access tokens for authentication.</div>
+        <div class="tooltip-ecorp">
+          <strong>A:</strong> PULUMI_ACCESS_TOKEN, GITHUB_APP_PRIVATE_KEY from Bob's session env.<br>
+          <strong>B:</strong> Full shell env on git commit (AWS creds, GITHUB_TOKEN).<br>
+          <strong>C:</strong> AWS temporary credentials from OIDC exchange (1-hour window).<br>
+          <strong>D:</strong> GITHUB_TOKEN (write-scoped) from pull_request_target context.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sAB">
+      <div class="tech-id">T1552.001</div>
+      <div class="tech-name">Unsecured Credentials: Files</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+        <span class="badge badge-B">B</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1552.001 · Unsecured Credentials: Credentials In Files</div>
+        <div class="tooltip-desc">Adversary searches for credentials stored in files.</div>
+        <div class="tooltip-ecorp">
+          Bob stores AWS_PROFILE in ~/.aws/credentials and PULUMI_ACCESS_TOKEN in ~/.zshrc. Both are accessible via process.env in any process he spawns. The hook / injected skill reads process.env and finds them without any filesystem traversal.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sB">
+      <div class="tech-id">T1552.004</div>
+      <div class="tech-name">Unsecured Credentials: Private Keys</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-B">B</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1552.004 · Unsecured Credentials: Private Keys</div>
+        <div class="tooltip-desc">Adversary searches for private key files.</div>
+        <div class="tooltip-ecorp">
+          GITHUB_APP_PRIVATE_KEY is in Bob's shell env (loaded from a dotfile). The git hook gets it via printenv with no file-system access needed — it's already in the environment of every process Bob runs. The ToB deny rule protects ~/.ssh/** from Read tool but does not protect env vars.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       COLUMN 8 · Discovery
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="tactic-col flip">
+    <div class="tactic-header">
+      <div class="tactic-id">TA0007</div>
+      <div class="tactic-name">Discovery</div>
+      <div class="tactic-count">4 techniques</div>
+    </div>
+
+    <div class="technique sA">
+      <div class="tech-id">T1087.004</div>
+      <div class="tech-name">Account Discovery: Cloud Account</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1087.004 · Account Discovery: Cloud Account</div>
+        <div class="tooltip-desc">Adversary enumerates cloud accounts and identities.</div>
+        <div class="tooltip-ecorp">
+          aiSecurityViewer grants iam:ListRoles, iam:ListPolicies, resourcemanager.projects.getIamPolicy. With the single-SA design (pre-migration window), Malice can enumerate the full org IAM topology: who has what role in which account, which service accounts have elevated access, which OIDC trust policies exist.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sA">
+      <div class="tech-id">T1580</div>
+      <div class="tech-name">Cloud Infrastructure Discovery</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1580 · Cloud Infrastructure Discovery</div>
+        <div class="tooltip-desc">Adversary enumerates cloud infrastructure to identify targets.</div>
+        <div class="tooltip-ecorp">
+          aiSecurityViewer allows ec2:Describe*, ecs:DescribeClusters, eks:DescribeCluster, rds:DescribeDBInstances. Malice can build a complete inventory of Ecorp's production infrastructure: all running services, their VPC placement, their database endpoints. This accelerates targeting of the Aegis/Serenova data pipeline.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sA">
+      <div class="tech-id">T1526</div>
+      <div class="tech-name">Cloud Service Discovery</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1526 · Cloud Service Discovery</div>
+        <div class="tooltip-desc">Adversary enumerates cloud services available in the environment.</div>
+        <div class="tooltip-ecorp">
+          securityhub:GetFindings + guardduty:GetFindings return ALL current unresolved security findings. This is a road map of known-unpatched vulnerabilities across every service. Malice sees exactly which CVEs are unpatched, which S3 buckets have public access misconfigurations, and which IAM policies are flagged as over-permissive.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sAB">
+      <div class="tech-id">T1082</div>
+      <div class="tech-name">System Information Discovery</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+        <span class="badge badge-B">B</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1082 · System Information Discovery</div>
+        <div class="tooltip-desc">Adversary gathers detailed information about the system.</div>
+        <div class="tooltip-ecorp">
+          <strong>A:</strong> lambda:GetFunction exposes all Lambda environment variables — if any embed secrets rather than using Secrets Manager (the external-oauth Lambda does), they are visible.<br>
+          <strong>B:</strong> The git hook runs hostname, printenv — captures the full runtime environment of Bob's machine at commit time.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       COLUMN 9 · Exfiltration
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="tactic-col flip">
+    <div class="tactic-header">
+      <div class="tactic-id">TA0010</div>
+      <div class="tactic-name">Exfiltration</div>
+      <div class="tactic-count">3 techniques</div>
+    </div>
+
+    <div class="technique sAll">
+      <div class="tech-id">T1041</div>
+      <div class="tech-name">Exfiltration Over C2 Channel</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+        <span class="badge badge-B">B</span>
+        <span class="badge badge-C">C</span>
+        <span class="badge badge-D">D</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1041 · Exfiltration Over C2 Channel</div>
+        <div class="tooltip-desc">Adversary exfiltrates data over the existing C2 channel.</div>
+        <div class="tooltip-ecorp">
+          All four scenarios use HTTPS POST to an attacker-controlled endpoint disguised as telemetry/analytics. The domain name mimics a legitimate service. The POST fires in 200–400ms. Backgrounded with &amp; in hook scenarios. No egress monitoring at Ecorp (Jira ticket: In Progress, assigned Bob).
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sAB">
+      <div class="tech-id">T1020</div>
+      <div class="tech-name">Automated Exfiltration</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-A">A</span>
+        <span class="badge badge-B">B</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1020 · Automated Exfiltration</div>
+        <div class="tooltip-desc">Adversary exfiltrates data automatically without human interaction.</div>
+        <div class="tooltip-ecorp">
+          <strong>A:</strong> Fires automatically every time /deploy-review is run (daily for Bob).<br>
+          <strong>B:</strong> Fires automatically on every git commit on any repo on Bob's machine. No per-commit decision — it is unconditional once the hook is installed.
+        </div>
+      </div>
+    </div>
+
+    <div class="technique sC">
+      <div class="tech-id">T1567</div>
+      <div class="tech-name">Exfiltration Over Web Service</div>
+      <div class="tech-scenarios">
+        <span class="badge badge-C">C</span>
+      </div>
+      <div class="tooltip">
+        <div class="tooltip-title">T1567 · Exfiltration Over Web Service</div>
+        <div class="tooltip-desc">Adversary uses legitimate web services for exfiltration.</div>
+        <div class="tooltip-ecorp">
+          <strong>C:</strong> OIDC temporary credentials are valid for 1 hour after the postinstall exfil. Malice can use them to call AWS APIs directly — no second implant needed. The exfiltrated credentials are the exfiltration channel for all subsequent data access.
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- .matrix -->
+</div><!-- .matrix-scroll -->
+
+<footer>
+  Techniques mapped to <a href="https://attack.mitre.org/" target="_blank">MITRE ATT&amp;CK Enterprise v15</a>.
+  Custom matrix for Ecorp threat model — module2_concurrency_security.
+  Not all ATT&amp;CK techniques represented; only those relevant to these scenarios.
+  <br><br>
+  Scenario files:
+  <a href="../README.md">README.md</a> ·
+  <a href="../STORYLINE.md">STORYLINE.md</a> ·
+  <a href="../storylines/">storylines/</a> ·
+  <a href="threat-model.md">Mermaid diagrams</a>
+</footer>
+
+</body>
+</html>

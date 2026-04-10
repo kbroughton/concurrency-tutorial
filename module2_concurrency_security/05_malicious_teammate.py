@@ -359,6 +359,7 @@ def explain_what_concurrency_doesnt_change():
   - Write malicious files to its own working directory
   - Refuse to complete tasks or return false results
   - Consume API tokens (cost attack)
+  - Plant malicious git hooks (.git/hooks/) — see section below
 
   Concurrency adds:
   ┌──────────────────────────────┬───────────┬────────────┐
@@ -394,6 +395,103 @@ def explain_what_concurrency_doesnt_change():
 
 
 # ---------------------------------------------------------------------------
+# Sandbox-Escape via Git Hook Injection (deferred execution)
+# ---------------------------------------------------------------------------
+#
+# This vector is not concurrency-specific — a single sandboxed agent can do it.
+# It belongs here because it is a "write inside sandbox, execute outside sandbox"
+# pattern that is easy to overlook when thinking about what the sandbox prevents.
+#
+# The attack:
+#   1. Sandboxed agent writes a malicious script to .git/hooks/pre-commit
+#      (or post-checkout, pre-push, prepare-commit-msg, etc.)
+#   2. Agent sets the file executable: chmod +x .git/hooks/pre-commit
+#   3. Agent's sandboxed session ends.  No harm done yet.
+#   4. User runs `git add` + `git commit` — hook fires with full user
+#      privileges, OUTSIDE any sandbox.
+#
+# Why sandboxes miss it:
+#   Claude Code's native sandbox (/sandbox) restricts writes to the current
+#   working directory and its subdirectories.  .git/hooks/ IS a subdirectory
+#   of the project root — it is inside the sandbox's allowed write scope.
+#   The sandbox cannot distinguish "write source code" from "plant a hook".
+#
+# Deferred execution is the key:
+#   The malicious write and the malicious execution are separated in time and
+#   in privilege context.  Sandbox enforcement happens at write time; hook
+#   execution happens at a later git invocation with no sandbox at all.
+#   This is a TOCTOU-adjacent pattern at the privilege-boundary level.
+#
+# Also watch .git/config:
+#   core.hooksPath in .git/config can redirect hooks to an arbitrary directory.
+#   A malicious agent could write core.hooksPath = /tmp/attacker-hooks/ and
+#   create scripts there, achieving the same effect without touching .git/hooks/.
+#
+# Gap in Trail of Bits claude-code-config (verified April 2026):
+#   https://github.com/trailofbits/claude-code-config
+#
+#   Their settings.json deny rules protect:
+#     Edit(~/.bashrc), Edit(~/.zshrc), Edit(~/.ssh/**) — shell config / credentials
+#   Their sandbox default: writes restricted to CWD (which includes .git/hooks/)
+#   Their PreToolUse hooks: block rm -rf and force-push to main
+#
+#   NOT covered: Edit(.git/hooks/**), Bash(chmod * .git/hooks/*),
+#                Edit(.git/config) for core.hooksPath redirection.
+#
+#   A sandboxed agent running under their recommended config can plant a git
+#   hook with no permission prompt and no policy violation.
+#
+# Mitigations (none are defaults in any published config as of April 2026):
+#   1. Deny rule: add "Edit(.git/**)" and "Bash(chmod * .git/**)" to settings.json
+#      deny list.  Drawback: also blocks legitimate .git/config edits by the agent.
+#   2. Redirect hooks globally: `git config --global core.hooksPath ~/.config/git/hooks`
+#      and make that directory read-only (chmod 555).  .git/hooks/ is then ignored.
+#   3. Hook integrity check: hash .git/hooks/* before and after each agent session;
+#      alert on any change.
+#   4. Audit .git/config after agent sessions for unexpected core.hooksPath entries.
+
+def explain_git_hook_sandbox_escape():
+    print("=" * 65)
+    print("Sandbox Escape via Git Hook Injection (non-concurrent)")
+    print("=" * 65)
+    print("""
+  Attack chain:
+    [Sandboxed agent session]
+      write .git/hooks/pre-commit  ← within CWD, sandbox allows it
+      chmod +x .git/hooks/pre-commit
+      session ends
+    [User later runs: git add && git commit]
+      .git/hooks/pre-commit fires with full user privileges
+      no sandbox, no permission prompt, no audit trail
+
+  Why this evades published configs (Trail of Bits, April 2026):
+    ┌──────────────────────────────┬───────────────────────────┐
+    │ Protection                   │ Covers .git/hooks/?       │
+    ├──────────────────────────────┼───────────────────────────┤
+    │ Sandbox (writes to CWD only) │ No — .git/ is in CWD      │
+    ├──────────────────────────────┼───────────────────────────┤
+    │ Deny Edit(~/.bashrc) etc.    │ No — only covers dotfiles  │
+    ├──────────────────────────────┼───────────────────────────┤
+    │ PreToolUse hook (rm/push)    │ No — not scoped to hooks   │
+    └──────────────────────────────┴───────────────────────────┘
+
+  Effective mitigations (choose one):
+    A. Global core.hooksPath redirect (strongest):
+         git config --global core.hooksPath ~/.config/git/hooks
+         chmod -R 555 ~/.config/git/hooks
+       .git/hooks/ is then ignored entirely by git.
+
+    B. Deny rule in settings.json:
+         "Edit(.git/hooks/**)", "Bash(chmod * .git/**)"
+       Prevents the write, but requires agent deny-list maintenance.
+
+    C. Session integrity check (detective, not preventive):
+         Hash .git/hooks/* and .git/config before and after agent runs.
+         Alert on any difference.
+    """)
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -402,3 +500,4 @@ if __name__ == "__main__":
     demo_lock_starvation()
     demo_confused_deputy()
     explain_what_concurrency_doesnt_change()
+    explain_git_hook_sandbox_escape()
