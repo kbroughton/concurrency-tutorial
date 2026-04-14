@@ -1,8 +1,9 @@
 # Python Concurrency for Security Engineers
-### Anthropic Interview Prep
+### Security Engineer AI Tools and Concurency
 
 A hands-on tutorial covering Python concurrency through a security lens.
 Built around real patterns from the Claude Code codebase and adversarial threat models.
+We present this in the format of interview prep.
 
 ---
 

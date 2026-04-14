@@ -19,6 +19,7 @@ from pathlib import Path
 # Fix it so concurrent calls never lose an update.
 # Constraint: use only stdlib (no external packages).
 
+
 class BuggyHookStateManager:
     def __init__(self, path: Path):
         self.path = path
@@ -30,6 +31,8 @@ class BuggyHookStateManager:
         data["tools"].append(tool_name)
         self.path.write_text(json.dumps(data))
 
+import fcntl
+from fcntl import LOCK_EX, LOCK_UN
 
 class FixedHookStateManager:
     """
@@ -39,10 +42,19 @@ class FixedHookStateManager:
     """
 
     def __init__(self, path: Path):
-        raise NotImplementedError
+        self._lock = threading.Lock()
+        self.path = path
+        path.write_text(json.dumps({"calls": 0, "tools": []}))
 
     def record_tool_call(self, tool_name: str) -> None:
-        raise NotImplementedError
+        with self._lock:
+            fd = open(self.path, "r+")
+            fcntl.flock(fd, LOCK_EX)
+            data = json.loads(self.path.read_text())
+            data["calls"] += 1
+            data["tools"].append(tool_name)
+            self.path.write_text(json.dumps(data))
+            fcntl.flock(fd, LOCK_UN)
 
 
 # ---------------------------------------------------------------------------
@@ -57,15 +69,16 @@ def vulnerable_load_config(config_path: Path) -> dict:
     with open(config_path) as f:
         return json.load(f)
 
-
+import os
 def safe_load_config(config_path: Path) -> dict:
     """
     TODO: Rewrite vulnerable_load_config to be TOCTOU-safe.
     Hint: use os.open with O_NOFOLLOW, then os.fdopen.
     Should raise OSError if path is a symlink.
     """
-    raise NotImplementedError
-
+    fd = os.open(config_path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd) as f:
+        return json.load(f)
 
 # ---------------------------------------------------------------------------
 # Exercise 3
@@ -77,14 +90,35 @@ def safe_load_config(config_path: Path) -> dict:
 #   4. Enforces a configurable timeout
 #   5. Returns {"exit_code": -1, "error": "timeout"} on timeout
 
+import subprocess
+import sys
+
 def run_hook(script: str, payload: dict, timeout_s: float = 1.0) -> dict:
     """
     TODO: Implement a timeout-enforcing hook runner.
     The subprocess should receive json.dumps(payload) on stdin
     and return a JSON result on stdout.
     """
-    raise NotImplementedError
-
+    input_bytes = json.dumps(payload).encode()
+    with subprocess.Popen(
+        [sys.executable, "-c", script],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ) as proc:
+        try:
+            stdout, stderr = proc.communicate(input=input_bytes, timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            proc.terminate()
+            try:
+                proc.wait(timeout=timeout_s)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+            return {"exit_code": -1, "error": "timeout"}
+        if stdout:
+            return json.loads(stdout)
+        return {"exit_code": proc.returncode}
 
 # ---------------------------------------------------------------------------
 # Exercise 4 (stretch)
